@@ -48,10 +48,10 @@ function init() {
 
 // ── Tab navigation ────────────────────────────────────────────────────────
 function showTab(tab) {
-  document.querySelectorAll('.tab-view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-view').forEach(el => { el.classList.remove('active'); el.style.display = 'none'; });
   document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
   const view = document.getElementById('tab-' + tab);
-  if (view) view.classList.add('active');
+  if (view) { view.classList.add('active'); view.style.display = 'block'; }
   const link = document.querySelector('[data-tab="' + tab + '"]');
   if (link) link.classList.add('active');
 
