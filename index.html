@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice Payment Automation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Setup screen shown until Script URL is configured -->
+<div id="setup-screen" style="display:none">
+  <div class="setup-box">
+    <div class="setup-logo">₹</div>
+    <h2>Invoice Payment Automation</h2>
+    <p>Enter your Google Apps Script Web App URL to connect the dashboard.</p>
+    <div class="form-field" style="margin:16px 0">
+      <label>Apps Script Web App URL</label>
+      <input id="setup-url" type="url" placeholder="https://script.google.com/macros/s/.../exec" style="width:100%">
+    </div>
+    <button class="btn btn-primary" onclick="connectScript()">Connect</button>
+    <p class="setup-hint">Get this URL from your Apps Script project → Deploy → Manage deployments</p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">₹</div>
+      <span>InvoicePay</span>
+    </div>
+    <div class="nav-links">
+      <a class="nav-link active" data-tab="dashboard" onclick="showTab('dashboard')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+      <a class="nav-link" data-tab="upload" onclick="showTab('upload')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload Invoice
+      </a>
+      <a class="nav-link" data-tab="tracking" onclick="showTab('tracking')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Payment Tracking
+      </a>
+      <a class="nav-link" data-tab="settings" onclick="showTab('settings')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="sync-status" id="sync-status">● Connected</div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- ── DASHBOARD ──────────────────────────────────────── -->
+    <div id="tab-dashboard" class="tab-view active">
+      <div class="page-header">
+        <div>
+          <h1>Vendor Invoice Management</h1>
+          <p class="page-sub">Track, validate, and process vendor invoices</p>
+        </div>
+        <button class="btn btn-primary" onclick="showTab('upload')">+ Upload Invoice</button>
+      </div>
+
+      <div class="metrics-grid" id="metrics-grid">
+        <div class="metric skeleton"></div>
+        <div class="metric skeleton"></div>
+        <div class="metric skeleton"></div>
+        <div class="metric skeleton"></div>
+        <div class="metric skeleton"></div>
+        <div class="metric skeleton"></div>
+      </div>
+
+      <div class="card">
+        <div class="filters-bar">
+          <input type="text" id="f-search" class="filter-input" placeholder="Search invoice / vendor…" oninput="debounceFilter()">
+          <select id="f-vendor" class="filter-select" onchange="loadInvoices()"><option value="">All vendors</option></select>
+          <select id="f-month" class="filter-select" onchange="loadInvoices()"><option value="">All months</option></select>
+          <select id="f-status" class="filter-select" onchange="loadInvoices()">
+            <option value="">All statuses</option>
+            <option value="pending">Pending validation</option>
+            <option value="validated">Validated</option>
+            <option value="payment">In payment flow</option>
+            <option value="utr">UTR received</option>
+          </select>
+          <button class="btn btn-sm" onclick="clearFilters()">Clear</button>
+        </div>
+
+        <div class="action-bar" id="action-bar" style="display:none">
+          <span class="sel-label" id="sel-label"></span>
+          <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">Send for Payment Approval →</button>
+          <button class="btn btn-sm" onclick="clearSelection()">Deselect all</button>
+        </div>
+
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:36px"><input type="checkbox" id="chk-all" onchange="toggleAll(this)"></th>
+                <th>Invoice No.</th>
+                <th>Vendor</th>
+                <th>Expense Head</th>
+                <th>Amount</th>
+                <th>Invoice Date</th>
+                <th>Due Date</th>
+                <th>Validation</th>
+                <th>Payment Status</th>
+                <th>UTR</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="invoice-body">
+              <tr><td colspan="11" class="empty-state">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UPLOAD ─────────────────────────────────────────── -->
+    <div id="tab-upload" class="tab-view" style="display:none">
+      <div class="page-header">
+        <div>
+          <h1>Upload Invoice</h1>
+          <p class="page-sub">Google Drive OCR extracts data automatically — verify before saving</p>
+        </div>
+      </div>
+
+      <div id="upload-step-1">
+        <div class="upload-zone" id="upload-zone"
+             onclick="document.getElementById('file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event)">
+          <div class="upload-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </div>
+          <p class="upload-title">Click to upload or drag &amp; drop</p>
+          <p class="upload-sub">PDF, JPG, PNG · max 20 MB</p>
+        </div>
+        <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="handleFileSelect(this)">
+      </div>
+
+      <div id="upload-step-2" style="display:none">
+        <div class="card">
+          <div class="card-title">
+            Extracted Invoice Data
+            <span class="ocr-tag">Google OCR — please verify</span>
+          </div>
+          <div class="form-grid" id="extract-form"></div>
+          <div class="form-actions">
+            <button class="btn" onclick="resetUpload()">↩ Different file</button>
+            <button class="btn" onclick="doSaveInvoice('pending')">Save as Pending</button>
+            <button class="btn btn-primary" onclick="doSaveInvoice('validated')">Validate &amp; Save</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="upload-loading" class="full-loading" style="display:none">
+        <div class="spinner"></div>
+        <p id="loading-msg">Uploading and extracting data…</p>
+      </div>
+    </div>
+
+    <!-- ── TRACKING ───────────────────────────────────────── -->
+    <div id="tab-tracking" class="tab-view" style="display:none">
+      <div class="page-header">
+        <div>
+          <h1>Payment Tracking</h1>
+          <p class="page-sub">Live approval journey — auto-updates every 10 min from Gmail</p>
+        </div>
+        <button class="btn btn-sm" onclick="loadTracking()">↻ Refresh</button>
+      </div>
+      <div id="tracking-list"></div>
+    </div>
+
+    <!-- ── SETTINGS ───────────────────────────────────────── -->
+    <div id="tab-settings" class="tab-view" style="display:none">
+      <div class="page-header">
+        <div><h1>Settings</h1><p class="page-sub">Approvers, vendors, template, and SLA configuration</p></div>
+      </div>
+
+      <!-- Approvers & SLA -->
+      <div class="card">
+        <div class="card-title">Approvers &amp; SLA</div>
+        <div class="settings-grid">
+          <div class="settings-col">
+            <h4 class="settings-section-title">Level 1 Approver</h4>
+            <div class="form-field"><label>Name</label><input id="s-a1-name" placeholder="Shailendra"></div>
+            <div class="form-field"><label>Email</label><input type="email" id="s-a1-email" placeholder="shailendra@company.com"></div>
+          </div>
+          <div class="settings-col">
+            <h4 class="settings-section-title">Level 2 Approver</h4>
+            <div class="form-field"><label>Name</label><input id="s-a2-name" placeholder="Dhyanesh"></div>
+            <div class="form-field"><label>Email</label><input type="email" id="s-a2-email" placeholder="dhyanesh@company.com"></div>
+          </div>
+          <div class="settings-col">
+            <h4 class="settings-section-title">Finance Team</h4>
+            <div class="form-field"><label>Email</label><input type="email" id="s-finance-email" placeholder="finance@company.com"></div>
+            <div class="form-field"><label>Company Name (in emails)</label><input id="s-company" placeholder="Your Company Ltd"></div>
+          </div>
+          <div class="settings-col">
+            <h4 class="settings-section-title">SLA (hours before alert)</h4>
+            <div class="form-field"><label>Level 1 SLA (hours)</label><input type="number" id="s-sla1" placeholder="24"></div>
+            <div class="form-field"><label>Level 2 SLA (hours)</label><input type="number" id="s-sla2" placeholder="24"></div>
+            <div class="form-field"><label>Finance SLA (hours)</label><input type="number" id="s-sla-f" placeholder="48"></div>
+          </div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" onclick="saveApproverSettings()">Save Approver Settings</button></div>
+      </div>
+
+      <!-- Bills Payable Template -->
+      <div class="card">
+        <div class="card-title">Bills Payable Template (.xlsx)</div>
+        <div id="template-status-bar"></div>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">
+          Upload your existing Bills Payable Excel template. The system will fill it with invoice data (using the cell mapping below) and attach it to every approval email.
+        </p>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-field" style="flex:1;min-width:240px">
+            <label>Select .xlsx template file</label>
+            <input type="file" id="template-file" accept=".xlsx">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="uploadTemplate()">Upload Template</button>
+        </div>
+
+        <div style="margin-top:20px">
+          <h4 style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text)">Cell Mapping</h4>
+          <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">
+            Open your template in Excel and note which cell holds each field. Enter the cell addresses below (e.g. B3, C5).
+          </p>
+          <table class="data-table" style="font-size:12px;max-width:600px">
+            <thead><tr><th>Invoice Field</th><th>Excel Cell</th><th>Sheet Name</th></tr></thead>
+            <tbody id="cell-map-body"></tbody>
+          </table>
+          <div class="form-field" style="max-width:200px;margin-top:10px">
+            <label>Worksheet / Tab Name</label>
+            <input id="s-sheet-name" placeholder="Sheet1">
+          </div>
+          <button class="btn btn-sm" style="margin-top:8px" onclick="saveCellMap()">Save Cell Mapping</button>
+        </div>
+      </div>
+
+      <!-- Vendor Master -->
+      <div class="card">
+        <div class="card-title">Vendor Master</div>
+        <div class="form-grid" style="max-width:700px;margin-bottom:12px">
+          <div class="form-field"><label>Vendor Name *</label><input id="v-name" placeholder="e.g. Infosys Ltd"></div>
+          <div class="form-field"><label>GSTIN</label><input id="v-gstin" placeholder="29AABCI1234L1ZU"></div>
+          <div class="form-field"><label>Default Expense Head</label>
+            <select id="v-expense"><option value="">Select…</option></select>
+          </div>
+          <div class="form-field"><label>Vendor Email (optional)</label><input id="v-email" placeholder="vendor@company.com"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="saveVendor()">Add / Update Vendor</button>
+        <div id="vendor-list" style="margin-top:16px"></div>
+      </div>
+
+      <!-- Expense Heads -->
+      <div class="card">
+        <div class="card-title">Expense Heads</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input id="new-head" class="filter-input" placeholder="New expense head name" style="max-width:280px">
+          <button class="btn btn-primary btn-sm" onclick="addExpenseHead()">Add</button>
+        </div>
+        <div id="expense-head-list"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title"></h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
