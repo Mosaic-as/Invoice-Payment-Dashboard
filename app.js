@@ -3,10 +3,16 @@
   const saved = localStorage.getItem('SCRIPT_URL');
   const configured = (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL && !SCRIPT_URL.includes('YOUR_APPS')) || saved;
   if (!configured) {
-    document.getElementById('setup-screen').style.display = '';
+    document.getElementById('setup-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
   } else {
     if (saved) window._scriptUrl = saved;
+    document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    // show dashboard tab by default
+    document.querySelectorAll('.tab-view').forEach(el => el.style.display = 'none');
+    const dash = document.getElementById('tab-dashboard');
+    if (dash) dash.style.display = 'block';
   }
 })();
 
