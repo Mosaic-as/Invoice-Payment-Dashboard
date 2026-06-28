@@ -118,6 +118,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .form-field input,.form-field select,.form-field textarea{padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:12px;font-family:inherit;outline:none;transition:border-color .12s}
 .form-field input:focus,.form-field select:focus{border-color:var(--primary)}
 .form-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.field-hint{font-size:11px;color:var(--text-tertiary);margin-top:2px}
 
 /* ── Full loading ─────────────────────────── */
 .full-loading{position:fixed;inset:0;background:rgba(255,255,255,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;gap:16px}

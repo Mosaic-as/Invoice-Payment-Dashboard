@@ -102,7 +102,7 @@
                 <th>Invoice No.</th>
                 <th>Vendor</th>
                 <th>Expense Head</th>
-                <th>Amount</th>
+                <th>Invoice Value</th>
                 <th>Invoice Date</th>
                 <th>Due Date</th>
                 <th>Validation</th>
@@ -147,7 +147,7 @@
         <div class="card">
           <div class="card-title">
             Extracted Invoice Data
-            <span class="ocr-tag">Google OCR — please verify</span>
+            <span class="ocr-tag">Google OCR — please verify all fields</span>
           </div>
           <div class="form-grid" id="extract-form"></div>
           <div class="form-actions">
@@ -182,9 +182,9 @@
         <div><h1>Settings</h1><p class="page-sub">Approvers, vendors, template, and SLA configuration</p></div>
       </div>
 
-      <!-- Approvers & SLA -->
+      <!-- Approvers & Email Config -->
       <div class="card">
-        <div class="card-title">Approvers &amp; SLA</div>
+        <div class="card-title">Approvers &amp; Email Configuration</div>
         <div class="settings-grid">
           <div class="settings-col">
             <h4 class="settings-section-title">Level 1 Approver</h4>
@@ -198,9 +198,24 @@
           </div>
           <div class="settings-col">
             <h4 class="settings-section-title">Finance Team</h4>
-            <div class="form-field"><label>Email</label><input type="email" id="s-finance-email" placeholder="finance@company.com"></div>
-            <div class="form-field"><label>Company Name (in emails)</label><input id="s-company" placeholder="Your Company Ltd"></div>
+            <div class="form-field">
+              <label>Finance Email(s)</label>
+              <input id="s-finance-emails" placeholder="finance1@co.in, finance2@co.in">
+              <div class="field-hint">Comma-separated for multiple recipients</div>
+            </div>
+            <div class="form-field"><label>Finance Name (for email greeting)</label><input id="s-finance-name" placeholder="Finance Team"></div>
           </div>
+          <div class="settings-col">
+            <h4 class="settings-section-title">CC &amp; Company</h4>
+            <div class="form-field">
+              <label>CC Emails (always CC'd)</label>
+              <input id="s-cc-emails" placeholder="rupesh@co.in, manish@co.in, asif@co.in">
+              <div class="field-hint">Comma-separated</div>
+            </div>
+            <div class="form-field"><label>Company Name (in emails)</label><input id="s-company" placeholder="Mosaic Wellness"></div>
+          </div>
+        </div>
+        <div class="settings-grid" style="margin-top:0">
           <div class="settings-col">
             <h4 class="settings-section-title">SLA (hours before alert)</h4>
             <div class="form-field"><label>Level 1 SLA (hours)</label><input type="number" id="s-sla1" placeholder="24"></div>
@@ -208,15 +223,15 @@
             <div class="form-field"><label>Finance SLA (hours)</label><input type="number" id="s-sla-f" placeholder="48"></div>
           </div>
         </div>
-        <div class="form-actions"><button class="btn btn-primary" onclick="saveApproverSettings()">Save Approver Settings</button></div>
+        <div class="form-actions"><button class="btn btn-primary" onclick="saveApproverSettings()">Save Settings</button></div>
       </div>
 
       <!-- Bills Payable Template -->
       <div class="card">
         <div class="card-title">Bills Payable Template (.xlsx)</div>
-        <div id="template-status-bar"></div>
+        <div id="template-status-bar" style="padding:8px 12px;border-radius:4px;font-size:12px;margin-bottom:12px;background:var(--bg)"></div>
         <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">
-          Upload your existing Bills Payable Excel template. The system will fill it with invoice data (using the cell mapping below) and attach it to every approval email.
+          Upload your Bills Payable Excel template. The system will copy it, fill one row per invoice, and attach it to every approval email. The template sheet must start with headers in row 1.
         </p>
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
           <div class="form-field" style="flex:1;min-width:240px">
@@ -225,36 +240,39 @@
           </div>
           <button class="btn btn-primary btn-sm" onclick="uploadTemplate()">Upload Template</button>
         </div>
-
-        <div style="margin-top:20px">
-          <h4 style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text)">Cell Mapping</h4>
-          <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">
-            Open your template in Excel and note which cell holds each field. Enter the cell addresses below (e.g. B3, C5).
-          </p>
-          <table class="data-table" style="font-size:12px;max-width:600px">
-            <thead><tr><th>Invoice Field</th><th>Excel Cell</th><th>Sheet Name</th></tr></thead>
-            <tbody id="cell-map-body"></tbody>
-          </table>
-          <div class="form-field" style="max-width:200px;margin-top:10px">
-            <label>Worksheet / Tab Name</label>
-            <input id="s-sheet-name" placeholder="Sheet1">
-          </div>
-          <button class="btn btn-sm" style="margin-top:8px" onclick="saveCellMap()">Save Cell Mapping</button>
-        </div>
       </div>
 
       <!-- Vendor Master -->
       <div class="card">
         <div class="card-title">Vendor Master</div>
-        <div class="form-grid" style="max-width:700px;margin-bottom:12px">
-          <div class="form-field"><label>Vendor Name *</label><input id="v-name" placeholder="e.g. Infosys Ltd"></div>
-          <div class="form-field"><label>GSTIN</label><input id="v-gstin" placeholder="29AABCI1234L1ZU"></div>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+          Each vendor must have an <b>Email Subject Line</b> — invoices sharing the same subject will be grouped into one email.
+          Use <code>mmm-yy</code> as a placeholder for the month (e.g. <code>Jun-26</code>).
+        </p>
+        <div class="form-grid" style="max-width:800px;margin-bottom:12px">
+          <div class="form-field"><label>Vendor Name *</label><input id="v-name" placeholder="e.g. Delhivery Limited"></div>
           <div class="form-field"><label>Default Expense Head</label>
             <select id="v-expense"><option value="">Select…</option></select>
+          </div>
+          <div class="form-field" style="grid-column:span 2">
+            <label>Email Subject Line</label>
+            <input id="v-subject" placeholder="e.g. Approval for Warehouse Rent &amp; Courier Bill Payment – mmm-yy">
+            <div class="field-hint">Vendors sharing the same subject go into one grouped email</div>
           </div>
           <div class="form-field"><label>Vendor Email (optional)</label><input id="v-email" placeholder="vendor@company.com"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="saveVendor()">Add / Update Vendor</button>
+
+        <!-- Bulk Upload -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-light)">
+          <h4 style="font-size:12px;font-weight:600;margin-bottom:6px">Bulk Upload Vendors (CSV / Excel)</h4>
+          <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">
+            Upload a CSV or tab-separated file with columns: <b>Vendor Name</b>, <b>Expense Head</b>, <b>Email Subject Line</b> (header row required).
+          </p>
+          <input type="file" id="bulk-vendor-file" accept=".csv,.txt,.tsv" onchange="handleBulkVendorFile(this)" style="font-size:12px">
+          <div id="bulk-preview" style="margin-top:12px"></div>
+        </div>
+
         <div id="vendor-list" style="margin-top:16px"></div>
       </div>
 

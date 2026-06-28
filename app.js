@@ -9,7 +9,6 @@
     if (saved) window._scriptUrl = saved;
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    // show dashboard tab by default
     document.querySelectorAll('.tab-view').forEach(el => el.style.display = 'none');
     const dash = document.getElementById('tab-dashboard');
     if (dash) dash.style.display = 'block';
@@ -23,9 +22,7 @@ function getScriptUrl() {
 
 function connectScript() {
   const url = document.getElementById('setup-url').value.trim();
-  if (!url || !url.includes('script.google.com')) {
-    toast('Please enter a valid Apps Script URL', 'error'); return;
-  }
+  if (!url || !url.includes('script.google.com')) { toast('Please enter a valid Apps Script URL', 'error'); return; }
   localStorage.setItem('SCRIPT_URL', url);
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -37,19 +34,20 @@ let selected = new Set();
 let filterTimer = null;
 let uploadedFileId = null, uploadedFileUrl = null, uploadedFileName = null;
 let allVendors = [], allExpenseHeads = [];
-let currentCellMap = { vendor_name:'B2',invoice_no:'B3',invoice_date:'B4',due_date:'B5',amount:'B6',expense_head:'B7',po_number:'B8',gstin:'B9' };
+
+const INVOICE_TYPES = ['Tax Invoice', 'Proforma Invoice', 'Credit Note', 'Agreement', 'Debit Note'];
 
 // ── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  if (document.getElementById('app').style.display !== 'none') {
-    init();
-  }
+  if (document.getElementById('app').style.display !== 'none') init();
 });
 
 function init() {
   loadMetrics();
   loadInvoices();
-  setInterval(() => { if (document.getElementById('tab-dashboard').classList.contains('active')) loadInvoices(true); }, 60000);
+  setInterval(() => {
+    if (document.getElementById('tab-dashboard').classList.contains('active')) loadInvoices(true);
+  }, 60000);
 }
 
 // ── Tab navigation ────────────────────────────────────────────────────────
@@ -64,23 +62,21 @@ function showTab(tab) {
   if (tab === 'dashboard') { loadMetrics(); loadInvoices(); }
   if (tab === 'tracking')  loadTracking();
   if (tab === 'settings')  loadSettings();
-  if (tab === 'upload')    loadExpenseHeadsDropdowns();
+  if (tab === 'upload')    loadDropdownData();
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────
 async function get(params) {
   const url = getScriptUrl();
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(url + '?' + qs);
+  const res = await fetch(url + '?' + new URLSearchParams(params).toString());
   return res.json();
 }
 
 async function post(params) {
   const url = getScriptUrl();
   const res = await fetch(url, {
-    method: 'POST',
-    body: JSON.stringify(params),
-    headers: { 'Content-Type': 'text/plain' }, // avoids CORS preflight
+    method: 'POST', body: JSON.stringify(params),
+    headers: { 'Content-Type': 'text/plain' }
   });
   return res.json();
 }
@@ -90,7 +86,7 @@ async function loadMetrics() {
   const data = await get({ action: 'getMetrics' }).catch(() => null);
   if (!data?.success) return;
   const m = data.metrics;
-  const fmt = n => n >= 100000 ? '₹' + (n / 100000).toFixed(1) + 'L' : n >= 1000 ? '₹' + (n / 1000).toFixed(1) + 'K' : '₹' + n;
+  const fmt = n => n >= 10000000 ? '₹' + (n/10000000).toFixed(2) + 'Cr' : n >= 100000 ? '₹' + (n/100000).toFixed(1) + 'L' : n >= 1000 ? '₹' + (n/1000).toFixed(1) + 'K' : '₹' + n;
 
   document.getElementById('metrics-grid').innerHTML = `
     <div class="metric"><div class="metric-label">Total Invoices</div><div class="metric-value">${m.total}</div><div class="metric-sub">All time</div></div>
@@ -99,17 +95,17 @@ async function loadMetrics() {
     <div class="metric"><div class="metric-label">In Payment Flow</div><div class="metric-value" style="color:var(--primary)">${m.payment}</div><div class="metric-sub">Sent for approval</div></div>
     <div class="metric"><div class="metric-label">Delayed</div><div class="metric-value" style="color:var(--danger)">${m.delayed}</div><div class="metric-sub">Past SLA</div></div>
     <div class="metric"><div class="metric-label">UTR Received</div><div class="metric-value" style="color:var(--success)">${m.utr}</div><div class="metric-sub">Paid</div></div>
-    <div class="metric"><div class="metric-label">Total Amount</div><div class="metric-value" style="font-size:18px">${fmt(m.totalAmt)}</div><div class="metric-sub">All invoices</div></div>
+    <div class="metric"><div class="metric-label">Total Invoice Value</div><div class="metric-value" style="font-size:16px">${fmt(m.totalAmt)}</div><div class="metric-sub">All invoices</div></div>
   `;
 
   allVendors = data.vendors || [];
   const vs = document.getElementById('f-vendor');
-  const curV = vs.value;
-  vs.innerHTML = '<option value="">All vendors</option>' + allVendors.map(v => `<option ${v === curV ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  const curV = vs?.value;
+  if (vs) vs.innerHTML = '<option value="">All vendors</option>' + allVendors.map(v => `<option ${v === curV ? 'selected' : ''}>${esc(v)}</option>`).join('');
 
   const ms = document.getElementById('f-month');
-  const curM = ms.value;
-  ms.innerHTML = '<option value="">All months</option>' + (data.months || []).map(m => `<option ${m === curM ? 'selected' : ''}>${esc(m)}</option>`).join('');
+  const curM = ms?.value;
+  if (ms) ms.innerHTML = '<option value="">All months</option>' + (data.months || []).map(m => `<option ${m === curM ? 'selected' : ''}>${esc(m)}</option>`).join('');
 }
 
 // ── Invoice table ─────────────────────────────────────────────────────────
@@ -125,31 +121,31 @@ async function loadInvoices() {
   if (status) params.status = status;
 
   const data = await get(params).catch(() => null);
-  if (!data?.success) { document.getElementById('invoice-body').innerHTML = '<tr><td colspan="11" class="empty-state">Could not load invoices</td></tr>'; return; }
-
   const body = document.getElementById('invoice-body');
+  if (!data?.success) { body.innerHTML = '<tr><td colspan="11" class="empty-state">Could not load invoices</td></tr>'; return; }
   if (!data.invoices.length) { body.innerHTML = '<tr><td colspan="11" class="empty-state">No invoices found</td></tr>'; updateActionBar(); return; }
 
   body.innerHTML = data.invoices.map(inv => {
-    const isDelayed = String(inv.pay_status).includes('delayed');
+    const isDelayed = String(inv.pay_status).includes('_delayed');
     const isSel = selected.has(String(inv.id));
     const canSel = inv.status === 'validated';
+    const invAmt = parseFloat(inv.invoice_value_numeric) || parseFloat(inv.invoice_value) || 0;
     return `<tr class="${isSel ? 'row-selected' : ''} ${isDelayed ? 'row-delayed' : ''}" id="row-${inv.id}">
       <td><input type="checkbox" ${canSel ? '' : 'disabled'} ${isSel ? 'checked' : ''} onchange="toggleSelect('${inv.id}',this.checked)"></td>
       <td><span class="inv-link" onclick="showInvoiceDetail('${inv.id}')">${esc(inv.invoice_no)}</span></td>
       <td>${esc(inv.vendor_name)}</td>
-      <td style="color:var(--text-secondary)">${esc(inv.expense_head || '—')}</td>
-      <td style="font-weight:600">${esc(inv.amount || '—')}</td>
-      <td style="color:var(--text-secondary)">${esc(inv.invoice_date || '—')}</td>
-      <td style="color:${isDueSoon(inv.due_date) ? 'var(--danger)' : 'var(--text-secondary)'}">${esc(inv.due_date || '—')}</td>
+      <td style="color:var(--text-secondary);font-size:11px">${esc(inv.expense_head || '—')}</td>
+      <td style="font-weight:600">₹${Number(invAmt).toLocaleString('en-IN')}</td>
+      <td style="color:var(--text-secondary)">${fmtDate(inv.invoice_date)}</td>
+      <td style="color:${isDueSoon(inv.due_date) ? 'var(--danger)' : 'var(--text-secondary)'}">${fmtDate(inv.due_date)}</td>
       <td>${validBadge(inv)}</td>
       <td>${payBadge(inv)}</td>
       <td>${inv.utr ? `<span class="utr-pill">✓ ${esc(inv.utr)}</span>` : '<span style="color:var(--text-tertiary)">—</span>'}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">
-        ${inv.status === 'pending' ? `<button class="btn btn-sm" onclick="showInvoiceDetail('${inv.id}')">Verify</button>` : ''}
-        ${inv.status === 'validated' ? `<button class="btn btn-sm btn-success" onclick="showInvoiceDetail('${inv.id}')">✓ View</button>` : ''}
-        ${inv.status === 'payment' ? `<button class="btn btn-sm" onclick="showTrackingModal('${inv.id}')">Track</button>` : ''}
-        ${inv.status === 'utr' ? `<button class="btn btn-sm" onclick="showInvoiceDetail('${inv.id}')">View</button>` : ''}
+        ${inv.status === 'pending'    ? `<button class="btn btn-sm" onclick="showInvoiceDetail('${inv.id}')">Verify</button>` : ''}
+        ${inv.status === 'validated'  ? `<button class="btn btn-sm btn-success" onclick="showInvoiceDetail('${inv.id}')">✓ View</button>` : ''}
+        ${inv.status === 'payment'    ? `<button class="btn btn-sm" onclick="showTrackingModal('${inv.id}')">Track</button>` : ''}
+        ${inv.status === 'utr'        ? `<button class="btn btn-sm" onclick="showInvoiceDetail('${inv.id}')">View</button>` : ''}
         ${inv.file_url ? `<a href="${inv.file_url}" target="_blank" class="btn btn-sm">📄</a>` : ''}
       </div></td>
     </tr>`;
@@ -157,21 +153,19 @@ async function loadInvoices() {
   updateActionBar();
 }
 
-function isDueSoon(d) { if (!d) return false; const diff = (new Date(d) - Date.now()) / 86400000; return diff >= 0 && diff <= 3; }
+function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }); } catch(_) { return String(d).split('T')[0]; } }
+function isDueSoon(d) { if (!d) return false; const diff = (new Date(d) - Date.now()) / 86400000; return diff >= 0 && diff <= 5; }
 
 function validBadge(inv) {
-  return inv.status === 'pending'
-    ? '<span class="badge badge-pending">Pending</span>'
-    : '<span class="badge badge-validated">Validated</span>';
+  return inv.status === 'pending' ? '<span class="badge badge-pending">Pending</span>' : '<span class="badge badge-validated">Validated</span>';
 }
-
 function payBadge(inv) {
   if (!inv.pay_status) return '<span style="color:var(--text-tertiary)">—</span>';
   const ps = String(inv.pay_status);
   const delayed = ps.includes('_delayed');
   const base = ps.replace('_delayed', '');
-  const map = { approval1:'Pending L1',approval2:'Pending L2',approval3:'Pending Finance',finance:'Pending Finance',utr:'UTR Received',query1:'Query L1',query2:'Query L2',query_finance:'Query Finance',rejected:'Rejected' };
-  const cls = { approval1:'badge-approval1',approval2:'badge-approval2',approval3:'badge-approval3',finance:'badge-finance',utr:'badge-utr',query1:'badge-query',query2:'badge-query',query_finance:'badge-query',rejected:'badge-rejected' };
+  const map = { approval1:'L1 Pending', approval2:'L2 Pending', finance:'Finance Pending', utr:'UTR Received', query1:'Query L1', query2:'Query L2', query3:'Query Finance', rejected:'Rejected' };
+  const cls = { approval1:'badge-approval1', approval2:'badge-approval2', finance:'badge-finance', utr:'badge-utr', query1:'badge-query', query2:'badge-query', query3:'badge-query', rejected:'badge-rejected' };
   if (delayed) return `<span class="badge badge-delayed">⚠ ${map[base] || base}</span>`;
   return `<span class="badge ${cls[base] || 'badge-finance'}">${map[base] || base}</span>`;
 }
@@ -186,19 +180,15 @@ function toggleSelect(id, checked) {
   if (row) row.classList.toggle('row-selected', checked);
   updateActionBar();
 }
-
 function toggleAll(chk) {
   document.querySelectorAll('#invoice-body input[type=checkbox]:not(:disabled)').forEach(cb => {
-    const row = cb.closest('tr');
-    const id = row.id.replace('row-', '');
-    if (chk.checked) { selected.add(id); cb.checked = true; row.classList.add('row-selected'); }
-    else { selected.delete(id); cb.checked = false; row.classList.remove('row-selected'); }
+    const id = cb.closest('tr').id.replace('row-', '');
+    if (chk.checked) { selected.add(id); cb.checked = true; cb.closest('tr').classList.add('row-selected'); }
+    else { selected.delete(id); cb.checked = false; cb.closest('tr').classList.remove('row-selected'); }
   });
   updateActionBar();
 }
-
 function clearSelection() { selected.clear(); loadInvoices(); document.getElementById('chk-all').checked = false; updateActionBar(); }
-
 function updateActionBar() {
   const n = selected.size;
   document.getElementById('action-bar').style.display = n > 0 ? 'flex' : 'none';
@@ -210,25 +200,34 @@ async function showInvoiceDetail(id) {
   const data = await get({ action: 'getTrackingDetail', id }).catch(() => null);
   if (!data?.success) { toast('Could not load invoice', 'error'); return; }
   const inv = data.invoice;
+  const invAmt = parseFloat(inv.invoice_value_numeric) || parseFloat(inv.invoice_value) || 0;
 
   openModal('Invoice — ' + esc(inv.invoice_no), `
-    <div class="detail-row"><span class="detail-label">Vendor</span><span class="detail-value">${esc(inv.vendor_name)}</span></div>
-    <div class="detail-row"><span class="detail-label">Expense Head</span><span class="detail-value">${esc(inv.expense_head || '—')}</span></div>
-    <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-value" style="color:var(--primary)">${esc(inv.amount || '—')}</span></div>
-    <div class="detail-row"><span class="detail-label">Invoice Date</span><span class="detail-value">${esc(inv.invoice_date || '—')}</span></div>
-    <div class="detail-row"><span class="detail-label">Due Date</span><span class="detail-value" style="color:${isDueSoon(inv.due_date)?'var(--danger)':'inherit'}">${esc(inv.due_date || '—')}</span></div>
-    <div class="detail-row"><span class="detail-label">PO Number</span><span class="detail-value">${esc(inv.po_number || '—')}</span></div>
-    <div class="detail-row"><span class="detail-label">GSTIN</span><span class="detail-value">${esc(inv.gstin || '—')}</span></div>
-    <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">${validBadge(inv)}</span></div>
-    ${inv.utr ? `<div class="detail-row"><span class="detail-label">UTR</span><span class="detail-value"><span class="utr-pill">✓ ${esc(inv.utr)}</span></span></div>` : ''}
-    ${inv.payment_date ? `<div class="detail-row"><span class="detail-label">Payment Date</span><span class="detail-value">${esc(inv.payment_date)}</span></div>` : ''}
-    ${inv.remarks ? `<div style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);font-size:12px;color:var(--text-secondary)">${esc(inv.remarks)}</div>` : ''}
-    ${inv.file_url ? `<div style="margin-top:12px"><a href="${inv.file_url}" target="_blank" class="btn btn-sm">📄 View Invoice on Drive</a></div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${detailRow('Vendor', inv.vendor_name)}
+      ${detailRow('Invoice Type', inv.invoice_type)}
+      ${detailRow('Expense Head', inv.expense_head)}
+      ${detailRow('Invoice Number', inv.invoice_no)}
+      ${detailRow('Invoice Date', fmtDate(inv.invoice_date))}
+      ${detailRow('Period From', fmtDate(inv.period_from))}
+      ${detailRow('Period To', fmtDate(inv.period_to))}
+      ${detailRow('Expense Amount (Taxable)', inv.expense_amount ? '₹' + Number(inv.expense_amount).toLocaleString('en-IN') : '—')}
+      ${detailRow('GST Amount', inv.gst_amount ? '₹' + Number(inv.gst_amount).toLocaleString('en-IN') : '—')}
+      ${detailRow('Invoice Value', '₹' + Number(invAmt).toLocaleString('en-IN'), true)}
+      ${detailRow('Amount to be Paid', inv.amount_to_pay ? '₹' + Number(inv.amount_to_pay).toLocaleString('en-IN') : '—', true)}
+      ${detailRow('Due Date', fmtDate(inv.due_date), false, isDueSoon(inv.due_date))}
+    </div>
+    ${inv.utr ? `<div style="margin-top:10px"><span class="utr-pill">✓ UTR: ${esc(inv.utr)}</span></div>` : ''}
+    ${inv.file_url ? `<div style="margin-top:10px"><a href="${inv.file_url}" target="_blank" class="btn btn-sm">📄 View Invoice on Drive</a></div>` : ''}
   `, `
     <button class="btn" onclick="closeModal()">Close</button>
     ${inv.status === 'pending' ? `<button class="btn btn-primary" onclick="markValidated('${inv.id}')">Mark as Validated</button>` : ''}
     ${inv.status === 'validated' ? `<span class="badge badge-validated" style="padding:6px 12px">✓ Validated</span>` : ''}
   `);
+}
+
+function detailRow(label, value, highlight = false, danger = false) {
+  return `<div class="detail-row"><span class="detail-label">${label}</span><span class="detail-value" style="${highlight ? 'font-weight:600;color:var(--primary)' : danger ? 'color:var(--danger)' : ''}">${esc(value || '—')}</span></div>`;
 }
 
 async function markValidated(id) {
@@ -244,25 +243,35 @@ async function openPaymentModal() {
 
   const data = await get({ action: 'getInvoices', status: 'validated' });
   const invoices = (data?.invoices || []).filter(i => ids.includes(String(i.id)));
-  const total = invoices.reduce((s, i) => s + (parseFloat(i.amount_numeric) || 0), 0);
-  const fmt = n => '₹' + n.toLocaleString('en-IN');
+
+  // Preview groups by subject
+  const groups = {};
+  invoices.forEach(inv => {
+    const vendor = allVendors.find ? inv.vendor_name : inv.vendor_name;
+    const subj = inv.vendor_name; // will be resolved server-side
+    if (!groups[subj]) groups[subj] = [];
+    groups[subj].push(inv);
+  });
+
+  const totalAmt = invoices.reduce((s, i) => s + (parseFloat(i.invoice_value_numeric) || parseFloat(i.invoice_value) || 0), 0);
 
   openModal(`Send for Payment Approval — ${invoices.length} invoice(s)`, `
     <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
-      These invoices will be packaged with the Bills Payable template and emailed to Level 1 approver.
+      Invoices will be grouped by vendor subject line and sent as separate emails to L1 approver.
     </p>
-    ${invoices.map(inv => `<div class="detail-row"><span class="detail-label">${esc(inv.invoice_no)} — ${esc(inv.vendor_name)}</span><span class="detail-value">${esc(inv.amount)}</span></div>`).join('')}
-    <div class="detail-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:8px">
-      <span class="detail-label" style="font-weight:600">Total</span>
-      <span class="detail-value" style="color:var(--primary);font-size:14px">${fmt(total)}</span>
-    </div>
-    <div style="margin-top:12px;padding:10px 14px;background:var(--primary-light);border-radius:var(--radius-sm);font-size:12px;color:var(--primary)">
-      <strong>Approval flow:</strong> Level 1 → Level 2 → Finance (UTR)
-    </div>
-    <div style="margin-top:12px" class="form-field">
-      <label>Submitted by (your name)</label>
-      <input id="sent-by" placeholder="Your name">
-    </div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px">
+      <thead><tr style="background:var(--bg)"><th style="padding:6px;text-align:left">Vendor</th><th style="padding:6px;text-align:left">Invoice No.</th><th style="padding:6px;text-align:right">Invoice Value</th></tr></thead>
+      <tbody>${invoices.map(inv => `<tr style="border-top:1px solid var(--border-light)">
+        <td style="padding:6px">${esc(inv.vendor_name)}</td>
+        <td style="padding:6px">${esc(inv.invoice_no)}</td>
+        <td style="padding:6px;text-align:right">₹${Number(parseFloat(inv.invoice_value_numeric)||parseFloat(inv.invoice_value)||0).toLocaleString('en-IN')}</td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--border);font-weight:600">
+        <td colspan="2" style="padding:6px">Total</td>
+        <td style="padding:6px;text-align:right;color:var(--primary)">₹${Number(totalAmt).toLocaleString('en-IN')}</td>
+      </tr></tfoot>
+    </table>
+    <div class="form-field"><label>Submitted by (your name)</label><input id="sent-by" placeholder="Your name"></div>
   `, `
     <button class="btn" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="doSendForPayment(window._pendingIds)">Send for Payment →</button>
@@ -273,19 +282,18 @@ async function openPaymentModal() {
 async function doSendForPayment(ids) {
   const sentBy = document.getElementById('sent-by')?.value || '';
   closeModal();
-  showLoading('Filling template and sending approval email…');
+  showLoading('Grouping invoices, filling template and sending approval email(s)…');
   let data;
-  try {
-    data = await post({ action: 'sendForPayment', invoice_ids: ids, sent_by: sentBy });
-  } catch(e) {
-    hideLoading();
-    toast('Network error: ' + e.message, 'error');
-    return;
-  }
+  try { data = await post({ action: 'sendForPayment', invoice_ids: ids, sent_by: sentBy }); }
+  catch(e) { hideLoading(); toast('Network error: ' + e.message, 'error'); return; }
   hideLoading();
   if (data?.success) {
     toast(data.message || 'Sent!', 'success');
-    if (data.templateWarning) toast('Template note: ' + data.templateWarning, 'warning');
+    if (data.groups) {
+      data.groups.forEach(g => {
+        if (g.error) toast('⚠ ' + g.subject + ': ' + g.error, 'error');
+      });
+    }
     selected.clear();
     loadInvoices(); loadMetrics();
   } else {
@@ -300,13 +308,13 @@ async function showTrackingModal(invoiceId) {
   const { invoice: inv, events, batch } = data;
 
   const stepLabels = ['Sent', 'L1 Approval', 'L2 Approval', 'Finance'];
-  const curLevel = parseInt(batch?.current_level) || 0;
+  const curLevel   = parseInt(batch?.current_level) || 0;
   const isComplete = batch?.status === 'completed';
 
   const stepsHtml = stepLabels.map((s, i) => {
-    const done  = isComplete || (i === 0) || i < curLevel;
-    const active = !isComplete && i === curLevel;
-    const delayed = String(inv.pay_status).includes('delayed') && active;
+    const done    = isComplete || (i === 0) || i < curLevel;
+    const active  = !isComplete && i === curLevel;
+    const delayed = String(inv.pay_status).includes('_delayed') && active;
     return `<div class="step-item ${done ? 'step-done' : ''}">
       <div class="step-dot ${done ? 'done' : active ? (delayed ? 'delayed' : 'active') : ''}">${done ? '✓' : i + 1}</div>
       <div class="step-name">${s}</div>
@@ -315,21 +323,22 @@ async function showTrackingModal(invoiceId) {
 
   const eventsHtml = (events || []).map(e => {
     const cls = e.status === 'approved' || e.status === 'utr_received' ? 'tl-done' : e.status === 'sent' ? 'tl-active' : 'tl-delayed';
-    const statusLabel = { sent: 'Sent for approval', approved: 'Approved', queried: 'Query raised', rejected: 'Rejected', utr_received: 'UTR received' }[e.status] || e.status;
+    const lbl = { sent:'Sent for approval', approved:'Approved', queried:'Query raised', rejected:'Rejected', utr_received:'UTR received' }[e.status] || e.status;
     return `<li class="${cls}"><div class="tl-dot"></div><div>
-      <div class="tl-label">L${e.level} — ${statusLabel}${e.approver_name ? ' (' + esc(e.approver_name) + ')' : ''}</div>
+      <div class="tl-label">L${e.level} — ${lbl}${e.approver_name ? ' (' + esc(e.approver_name) + ')' : ''}</div>
       <div class="tl-time">${e.responded_at || e.sent_at || ''}</div>
-      ${e.reply_snippet ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;max-width:420px">${esc(e.reply_snippet.substring(0, 140))}…</div>` : ''}
+      ${e.reply_snippet ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${esc(e.reply_snippet.substring(0,140))}</div>` : ''}
     </div></li>`;
   }).join('');
 
   openModal('Approval Tracking — ' + esc(inv.invoice_no), `
-    <div class="detail-row"><span class="detail-label">Vendor</span><span class="detail-value">${esc(inv.vendor_name)}</span></div>
-    <div class="detail-row"><span class="detail-label">Amount</span><span class="detail-value">${esc(inv.amount)}</span></div>
-    ${batch ? `<div class="detail-row"><span class="detail-label">Batch</span><span class="detail-value">${esc(batch.batch_ref)}</span></div>` : ''}
+    ${detailRow('Vendor', inv.vendor_name)}
+    ${detailRow('Invoice Value', '₹' + Number(parseFloat(inv.invoice_value_numeric)||parseFloat(inv.invoice_value)||0).toLocaleString('en-IN'))}
+    ${batch ? detailRow('Batch', batch.batch_ref) : ''}
+    ${batch?.subject_line ? detailRow('Email Subject', batch.subject_line) : ''}
     <div class="steps-row" style="margin:16px 0">${stepsHtml}</div>
-    ${String(inv.pay_status).includes('delayed') ? `<div style="padding:8px 12px;background:var(--danger-light);border-radius:var(--radius-sm);font-size:12px;color:var(--danger);margin-bottom:12px">⚠ Past SLA — please follow up with the approver.</div>` : ''}
-    ${eventsHtml ? `<ul class="timeline" style="margin-top:8px">${eventsHtml}</ul>` : '<p style="font-size:12px;color:var(--text-secondary);margin-top:8px">No reply events yet.</p>'}
+    ${String(inv.pay_status).includes('_delayed') ? `<div style="padding:8px 12px;background:var(--danger-light);border-radius:var(--radius-sm);font-size:12px;color:var(--danger);margin-bottom:12px">⚠ Past SLA — please follow up.</div>` : ''}
+    ${eventsHtml ? `<ul class="timeline">${eventsHtml}</ul>` : '<p style="font-size:12px;color:var(--text-secondary)">No reply events yet.</p>'}
     ${inv.utr ? `<div style="margin-top:10px"><span class="utr-pill">✓ UTR: ${esc(inv.utr)}</span></div>` : ''}
   `, `
     <button class="btn" onclick="closeModal()">Close</button>
@@ -346,8 +355,8 @@ async function doReminder(batchId) {
 function manualUTRModal(invoiceId) {
   closeModal();
   openModal('Record UTR Number', `
-    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Enter the UTR / transaction reference received from Finance.</p>
-    <div class="form-field"><label>UTR Number *</label><input id="utr-val" placeholder="e.g. SBIN0000123456789"></div>
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Enter the UTR / Transaction ID from the bank statement.</p>
+    <div class="form-field"><label>UTR / Transaction ID *</label><input id="utr-val" placeholder="e.g. S45225710 or IN42617054789487"></div>
     <div class="form-field" style="margin-top:10px"><label>Payment Date</label><input type="date" id="utr-date" value="${new Date().toISOString().split('T')[0]}"></div>
     <div class="form-field" style="margin-top:10px"><label>Remarks (optional)</label><input id="utr-remarks" placeholder="e.g. NEFT transfer"></div>
   `, `
@@ -369,10 +378,12 @@ async function loadTracking() {
   const el = document.getElementById('tracking-list');
   el.innerHTML = '<div class="empty-state" style="padding:40px">Loading…</div>';
   const data = await get({ action: 'getTracking' }).catch(() => null);
-  if (!data?.success || !data.batches.length) { el.innerHTML = '<div class="card"><div class="empty-state">No payment batches yet. Validated invoices sent for payment will appear here.</div></div>'; return; }
+  if (!data?.success || !data.batches.length) {
+    el.innerHTML = '<div class="card"><div class="empty-state">No payment batches yet.</div></div>'; return;
+  }
 
   el.innerHTML = data.batches.map(batch => {
-    const isDelayed  = batch.invoices.some(i => String(i.pay_status).includes('delayed'));
+    const isDelayed  = batch.invoices.some(i => String(i.pay_status).includes('_delayed'));
     const isComplete = batch.status === 'completed';
     const curLevel   = parseInt(batch.current_level) || 1;
     const stepLabels = ['Sent', 'L1', 'L2', 'Finance'];
@@ -380,27 +391,32 @@ async function loadTracking() {
       const done  = isComplete || i < curLevel;
       const active = !isComplete && i === curLevel;
       const delayed = isDelayed && active;
-      return `<div class="step-item ${done ? 'step-done' : ''}">
-        <div class="step-dot ${done ? 'done' : active ? (delayed ? 'delayed' : 'active') : ''}">${done ? '✓' : i + 1}</div>
+      return `<div class="step-item ${done?'step-done':''}">
+        <div class="step-dot ${done?'done':active?(delayed?'delayed':'active'):''}">${done?'✓':i+1}</div>
         <div class="step-name">${s}</div>
       </div>`;
     }).join('');
 
-    const invRows = batch.invoices.map(i => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border-light)"><span>${esc(i.invoice_no)} — ${esc(i.vendor_name)}</span><span>${esc(i.amount)}</span></div>`).join('');
+    const totalAmt = batch.invoices.reduce((s,i) => s + (parseFloat(i.invoice_value_numeric)||parseFloat(i.invoice_value)||0), 0);
 
-    return `<div class="track-card ${isDelayed ? 'is-delayed' : ''} ${isComplete ? 'is-completed' : ''}">
+    return `<div class="track-card ${isDelayed?'is-delayed':''} ${isComplete?'is-completed':''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div>
-          <div style="font-weight:600;font-size:13px">${esc(batch.batch_ref)}</div>
-          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">Sent ${esc(String(batch.sent_at || '').split('T')[0])} by ${esc(batch.sent_by || '—')}</div>
+          <div style="font-weight:600;font-size:13px">${esc(batch.subject_line || batch.batch_ref)}</div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${esc(batch.batch_ref)} · Sent ${fmtDate(batch.sent_at)} by ${esc(batch.sent_by||'—')}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <span class="badge ${isComplete ? 'badge-utr' : isDelayed ? 'badge-delayed' : 'badge-approval1'}">${isDelayed ? '⚠ Delayed' : isComplete ? 'Completed' : 'In Progress'}</span>
-          ${batch.invoices[0]?.utr ? `<span class="utr-pill">UTR: ${esc(batch.invoices[0].utr)}</span>` : ''}
+          <span class="badge ${isComplete?'badge-utr':isDelayed?'badge-delayed':'badge-approval1'}">${isDelayed?'⚠ Delayed':isComplete?'Completed':'In Progress'}</span>
+          <span style="font-size:12px;font-weight:600;color:var(--primary)">₹${Number(totalAmt).toLocaleString('en-IN')}</span>
         </div>
       </div>
       <div class="steps-row">${steps}</div>
-      <div style="margin-top:12px">${invRows}</div>
+      <div style="margin-top:12px;font-size:12px">
+        ${batch.invoices.map(i => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-light)">
+          <span>${esc(i.invoice_no)} — ${esc(i.vendor_name)}</span>
+          <span>₹${Number(parseFloat(i.invoice_value_numeric)||parseFloat(i.invoice_value)||0).toLocaleString('en-IN')}</span>
+        </div>`).join('')}
+      </div>
       <div style="display:flex;gap:6px;margin-top:12px;justify-content:flex-end;flex-wrap:wrap">
         ${batch.invoices.map(i => `<button class="btn btn-sm" onclick="showTrackingModal('${i.id}')">Timeline ${esc(i.invoice_no)}</button>`).join('')}
         ${!isComplete ? `<button class="btn btn-sm" onclick="doReminder('${batch.id}')">Send Reminder</button>` : ''}
@@ -410,10 +426,13 @@ async function loadTracking() {
 }
 
 // ── Upload flow ───────────────────────────────────────────────────────────
-async function loadExpenseHeadsDropdowns() {
-  if (allExpenseHeads.length) return;
-  const data = await get({ action: 'getExpenseHeads' }).catch(() => null);
-  if (data?.success) allExpenseHeads = data.expenseHeads.map(h => h.name);
+async function loadDropdownData() {
+  if (allExpenseHeads.length && allVendors.length) return;
+  const data = await get({ action: 'getSettings' }).catch(() => null);
+  if (data?.success) {
+    allExpenseHeads = (data.expenseHeads || []).map(h => h.name);
+    allVendors = (data.vendors || []).map(v => v.name);
+  }
 }
 
 function handleDrop(e) {
@@ -422,12 +441,11 @@ function handleDrop(e) {
   const file = e.dataTransfer.files[0];
   if (file) processFile(file);
 }
-
 function handleFileSelect(input) { if (input.files[0]) processFile(input.files[0]); }
 
 async function processFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
-  if (!['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) { toast('Only PDF, JPG, PNG allowed', 'error'); return; }
+  if (!['pdf','jpg','jpeg','png'].includes(ext)) { toast('Only PDF, JPG, PNG allowed', 'error'); return; }
 
   document.getElementById('upload-step-1').style.display = 'none';
   document.getElementById('upload-loading').style.display = 'flex';
@@ -437,16 +455,15 @@ async function processFile(file) {
   document.getElementById('loading-msg').textContent = 'Extracting data with Google OCR…';
 
   const data = await post({ action: 'uploadInvoice', fileName: file.name, mimeType: file.type, data: base64 });
-
   document.getElementById('upload-loading').style.display = 'none';
 
   if (!data?.success) { toast(data?.message || 'Upload failed', 'error'); document.getElementById('upload-step-1').style.display = ''; return; }
 
-  uploadedFileId  = data.fileId;
-  uploadedFileUrl = data.fileUrl;
+  uploadedFileId   = data.fileId;
+  uploadedFileUrl  = data.fileUrl;
   uploadedFileName = data.fileName;
 
-  await loadExpenseHeadsDropdowns();
+  await loadDropdownData();
   renderExtractForm(data.extracted || {});
   document.getElementById('upload-step-2').style.display = '';
 }
@@ -460,38 +477,64 @@ function fileToBase64(file) {
 }
 
 function renderExtractForm(d) {
-  const vendorOpts = ['', ...allVendors].map(v => `<option ${v === d.vendor_name ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  const vendorOpts = allVendors.map(v => `<option ${v === d.vendor_name ? 'selected' : ''}>${esc(v)}</option>`).join('');
   const expOpts = allExpenseHeads.map(h => `<option ${h === d.expense_head ? 'selected' : ''}>${esc(h)}</option>`).join('');
+  const typeOpts = INVOICE_TYPES.map(t => `<option ${t === (d.invoice_type||'Tax Invoice') ? 'selected' : ''}>${t}</option>`).join('');
+
   document.getElementById('extract-form').innerHTML = `
+    <div class="form-field"><label>Vendor Name *</label><input id="e-vendor" list="vendor-dl" value="${esc(d.vendor_name||'')}"><datalist id="vendor-dl">${vendorOpts}</datalist></div>
+    <div class="form-field"><label>Invoice Type *</label><select id="e-type">${typeOpts}</select></div>
+    <div class="form-field"><label>Expense Head</label><select id="e-expense"><option value="">Select…</option>${expOpts}</select></div>
     <div class="form-field"><label>Invoice Number *</label><input id="e-invno" value="${esc(d.invoice_no||'')}"></div>
-    <div class="form-field"><label>Vendor *</label><input id="e-vendor" list="vendor-dl" value="${esc(d.vendor_name||'')}"><datalist id="vendor-dl">${vendorOpts}</datalist></div>
-    <div class="form-field"><label>Expense Head</label><select id="e-expense">${expOpts}</select></div>
-    <div class="form-field"><label>Amount (₹)</label><input id="e-amount" value="${esc(d.amount||'')}"></div>
     <div class="form-field"><label>Invoice Date</label><input type="date" id="e-date" value="${esc(d.invoice_date||'')}"></div>
-    <div class="form-field"><label>Due Date</label><input type="date" id="e-due" value="${esc(d.due_date||'')}"></div>
-    <div class="form-field"><label>GSTIN</label><input id="e-gstin" value="${esc(d.gstin||'')}"></div>
-    <div class="form-field"><label>PO Number</label><input id="e-po" value="${esc(d.po_number||'')}"></div>
+    <div class="form-field"><label>Period From</label><input type="date" id="e-period-from"></div>
+    <div class="form-field"><label>Period To</label><input type="date" id="e-period-to"></div>
+    <div class="form-field"><label>Expense Amount (Taxable, excl. GST) ₹</label><input type="number" id="e-expense-amt" value="${esc(d.expense_amount||d.amount_numeric||'')}" oninput="calcInvoiceValue()"></div>
+    <div class="form-field"><label>GST Amount ₹</label><input type="number" id="e-gst" value="${esc(d.gst_amount||'')}" oninput="calcInvoiceValue()"></div>
+    <div class="form-field"><label>Invoice Value (auto)</label><input type="number" id="e-inv-val" readonly style="background:var(--bg);color:var(--primary);font-weight:600"></div>
+    <div class="form-field"><label>Amount to be Paid ₹</label><input type="number" id="e-amt-pay" value="${esc(d.amount_to_pay||'')}"></div>
+    <div class="form-field"><label>Payment Due Date</label><input type="date" id="e-due" value="${esc(d.due_date||'')}"></div>
   `;
+  calcInvoiceValue();
+}
+
+function calcInvoiceValue() {
+  const exp = parseFloat(document.getElementById('e-expense-amt')?.value) || 0;
+  const gst = parseFloat(document.getElementById('e-gst')?.value) || 0;
+  const val = exp + gst;
+  const el = document.getElementById('e-inv-val');
+  if (el) { el.value = val || ''; }
+  const pay = document.getElementById('e-amt-pay');
+  if (pay && !pay.value) pay.value = val || '';
 }
 
 async function doSaveInvoice(status) {
-  const invNo = document.getElementById('e-invno')?.value.trim();
+  const invNo  = document.getElementById('e-invno')?.value.trim();
   const vendor = document.getElementById('e-vendor')?.value.trim();
   if (!invNo || !vendor) { toast('Invoice number and vendor name are required', 'error'); return; }
 
-  const amtStr = document.getElementById('e-amount')?.value || '';
-  const amtNum = parseFloat(amtStr.replace(/[^0-9.]/g, '')) || 0;
+  const expAmt = parseFloat(document.getElementById('e-expense-amt')?.value) || 0;
+  const gstAmt = parseFloat(document.getElementById('e-gst')?.value) || 0;
+  const invVal = expAmt + gstAmt;
 
   const data = await post({
-    action: 'saveInvoice',
-    invoice_no: invNo, vendor_name: vendor,
-    expense_head: document.getElementById('e-expense')?.value,
-    amount: amtStr, amount_numeric: amtNum,
-    invoice_date: document.getElementById('e-date')?.value,
-    due_date: document.getElementById('e-due')?.value,
-    gstin: document.getElementById('e-gstin')?.value,
-    po_number: document.getElementById('e-po')?.value,
-    file_id: uploadedFileId, file_url: uploadedFileUrl, file_name: uploadedFileName,
+    action:        'saveInvoice',
+    invoice_no:    invNo,
+    vendor_name:   vendor,
+    invoice_type:  document.getElementById('e-type')?.value || 'Tax Invoice',
+    expense_head:  document.getElementById('e-expense')?.value,
+    invoice_date:  document.getElementById('e-date')?.value,
+    period_from:   document.getElementById('e-period-from')?.value,
+    period_to:     document.getElementById('e-period-to')?.value,
+    expense_amount: expAmt,
+    gst_amount:    gstAmt,
+    invoice_value: invVal,
+    invoice_value_numeric: invVal,
+    amount_to_pay: parseFloat(document.getElementById('e-amt-pay')?.value) || invVal,
+    due_date:      document.getElementById('e-due')?.value,
+    file_id:       uploadedFileId,
+    file_url:      uploadedFileUrl,
+    file_name:     uploadedFileName,
     status,
   });
 
@@ -522,87 +565,68 @@ async function loadSettings() {
   setVal('s-a1-email', s.APPROVER1_EMAIL);
   setVal('s-a2-name',  s.APPROVER2_NAME);
   setVal('s-a2-email', s.APPROVER2_EMAIL);
-  setVal('s-finance-email', s.FINANCE_EMAIL);
+  setVal('s-finance-emails', s.FINANCE_EMAILS || s.FINANCE_EMAIL);
+  setVal('s-finance-name',   s.FINANCE_NAME);
+  setVal('s-cc-emails', s.CC_EMAILS);
   setVal('s-company',  s.COMPANY_NAME);
-  setVal('s-sla1', s.SLA_LEVEL1_HOURS || '24');
-  setVal('s-sla2', s.SLA_LEVEL2_HOURS || '24');
+  setVal('s-sla1',  s.SLA_LEVEL1_HOURS || '24');
+  setVal('s-sla2',  s.SLA_LEVEL2_HOURS || '24');
   setVal('s-sla-f', s.SLA_FINANCE_HOURS || '48');
-  setVal('s-sheet-name', s.TEMPLATE_SHEET_NAME || 'Sheet1');
 
-  // Template status
   const tmplEl = document.getElementById('template-status-bar');
   tmplEl.className = data.hasTemplate ? 'template-ok' : 'template-missing';
-  tmplEl.textContent = data.hasTemplate ? '✓ Bills Payable template is uploaded' : '⚠ No template uploaded yet.';
+  tmplEl.textContent = data.hasTemplate ? '✓ Bills Payable template uploaded' : '⚠ No template uploaded yet.';
 
-  // Cell map
-  try {
-    if (s.CELL_MAP) currentCellMap = JSON.parse(s.CELL_MAP);
-  } catch (_) {}
-  renderCellMapTable();
-
-  // Vendors
   allVendors = (data.vendors || []).map(v => v.name);
   allExpenseHeads = (data.expenseHeads || []).map(h => h.name);
 
   const sel = document.getElementById('v-expense');
-  sel.innerHTML = '<option value="">Select…</option>' + allExpenseHeads.map(h => `<option>${esc(h)}</option>`).join('');
+  if (sel) sel.innerHTML = '<option value="">Select…</option>' + allExpenseHeads.map(h => `<option>${esc(h)}</option>`).join('');
 
   renderVendorList(data.vendors || []);
   renderExpenseHeadList(data.expenseHeads || []);
 }
 
-function renderCellMapTable() {
-  const fields = [
-    ['vendor_name','Vendor Name'],['invoice_no','Invoice Number'],['invoice_date','Invoice Date'],
-    ['due_date','Due Date'],['amount','Amount'],['expense_head','Expense Head'],
-    ['po_number','PO Number'],['gstin','GSTIN'],
-  ];
-  document.getElementById('cell-map-body').innerHTML = fields.map(([f, label]) => `
-    <tr>
-      <td>${label}</td>
-      <td><input class="filter-input cm-cell" data-field="${f}" value="${esc(currentCellMap[f] || '')}" style="width:72px;height:28px"></td>
-      <td><input class="filter-input cm-sheet" value="${esc(document.getElementById('s-sheet-name')?.value || 'Sheet1')}" style="width:90px;height:28px" disabled></td>
-    </tr>`).join('');
-}
-
 function renderVendorList(vendors) {
   document.getElementById('vendor-list').innerHTML = vendors.length
     ? vendors.map(v => `<div class="vendor-row">
-        <div><span style="font-weight:500">${esc(v.name)}</span>${v.gstin ? `<span style="font-size:11px;color:var(--text-secondary);margin-left:8px">${esc(v.gstin)}</span>` : ''}${v.default_expense_head ? `<span class="expense-tag">${esc(v.default_expense_head)}</span>` : ''}</div>
+        <div style="flex:1">
+          <span style="font-weight:500">${esc(v.name)}</span>
+          ${v.default_expense_head ? `<span class="expense-tag">${esc(v.default_expense_head)}</span>` : ''}
+          ${v.email_subject ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${esc(v.email_subject)}</div>` : ''}
+        </div>
         <button class="btn btn-sm btn-danger" onclick="deleteVendor('${v.id}')">Delete</button>
       </div>`).join('')
     : '<p style="font-size:12px;color:var(--text-secondary)">No vendors added yet</p>';
 }
 
 function renderExpenseHeadList(heads) {
-  document.getElementById('expense-head-list').innerHTML = heads.map(h => `
-    <div class="vendor-row"><span>${esc(h.name)}</span><button class="btn btn-sm btn-danger" onclick="deleteHead('${h.id}')">Delete</button></div>`).join('');
+  document.getElementById('expense-head-list').innerHTML = heads.map(h =>
+    `<div class="vendor-row"><span>${esc(h.name)}</span><button class="btn btn-sm btn-danger" onclick="deleteHead('${h.id}')">Delete</button></div>`
+  ).join('');
 }
 
 async function saveApproverSettings() {
-  const settings = {
-    APPROVER1_NAME: getVal('s-a1-name'), APPROVER1_EMAIL: getVal('s-a1-email'),
-    APPROVER2_NAME: getVal('s-a2-name'), APPROVER2_EMAIL: getVal('s-a2-email'),
-    FINANCE_EMAIL:  getVal('s-finance-email'), COMPANY_NAME: getVal('s-company'),
-    SLA_LEVEL1_HOURS: getVal('s-sla1'), SLA_LEVEL2_HOURS: getVal('s-sla2'),
+  const data = await post({ action: 'saveSettings', settings: {
+    APPROVER1_NAME:    getVal('s-a1-name'),
+    APPROVER1_EMAIL:   getVal('s-a1-email'),
+    APPROVER2_NAME:    getVal('s-a2-name'),
+    APPROVER2_EMAIL:   getVal('s-a2-email'),
+    FINANCE_EMAILS:    getVal('s-finance-emails'),
+    FINANCE_NAME:      getVal('s-finance-name'),
+    CC_EMAILS:         getVal('s-cc-emails'),
+    COMPANY_NAME:      getVal('s-company'),
+    SLA_LEVEL1_HOURS:  getVal('s-sla1'),
+    SLA_LEVEL2_HOURS:  getVal('s-sla2'),
     SLA_FINANCE_HOURS: getVal('s-sla-f'),
-  };
-  const data = await post({ action: 'saveSettings', settings });
+  }});
   toast(data?.success ? 'Settings saved!' : data?.message, data?.success ? 'success' : 'error');
-}
-
-async function saveCellMap() {
-  const map = {};
-  document.querySelectorAll('.cm-cell').forEach(el => { if (el.value.trim()) map[el.dataset.field] = el.value.trim().toUpperCase(); });
-  const sheetName = getVal('s-sheet-name') || 'Sheet1';
-  const data = await post({ action: 'saveSettings', settings: { CELL_MAP: JSON.stringify(map), TEMPLATE_SHEET_NAME: sheetName } });
-  toast(data?.success ? 'Cell mapping saved!' : data?.message, data?.success ? 'success' : 'error');
 }
 
 async function uploadTemplate() {
   const file = document.getElementById('template-file')?.files[0];
   if (!file) { toast('Select an .xlsx file first', 'error'); return; }
-  showLoading('Uploading template to Google Drive…');
+  showLoading('Uploading template…');
   const base64 = await fileToBase64(file);
   const data = await post({ action: 'uploadTemplate', fileName: file.name, data: base64 });
   hideLoading();
@@ -613,9 +637,17 @@ async function uploadTemplate() {
 async function saveVendor() {
   const name = getVal('v-name');
   if (!name) { toast('Vendor name required', 'error'); return; }
-  const data = await post({ action: 'saveVendor', name, gstin: getVal('v-gstin'), email: getVal('v-email'), default_expense_head: document.getElementById('v-expense')?.value });
-  if (data?.success) { toast('Vendor saved!', 'success'); document.getElementById('v-name').value = ''; document.getElementById('v-gstin').value = ''; document.getElementById('v-email').value = ''; loadSettings(); }
-  else toast(data?.message, 'error');
+  const data = await post({
+    action: 'saveVendor', name,
+    email: getVal('v-email'),
+    default_expense_head: document.getElementById('v-expense')?.value,
+    email_subject: getVal('v-subject'),
+  });
+  if (data?.success) {
+    toast('Vendor saved!', 'success');
+    ['v-name','v-email','v-subject'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    loadSettings();
+  } else toast(data?.message, 'error');
 }
 
 async function deleteVendor(id) {
@@ -637,6 +669,55 @@ async function deleteHead(id) {
   loadSettings();
 }
 
+// ── Bulk vendor upload ────────────────────────────────────────────────────
+function handleBulkVendorFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length < 2) { toast('File appears empty', 'error'); return; }
+
+    // Auto-detect separator
+    const sep = lines[0].includes('\t') ? '\t' : ',';
+    const headers = lines[0].split(sep).map(h => h.replace(/"/g,'').trim().toLowerCase());
+
+    const nameIdx    = headers.findIndex(h => h.includes('vendor') || h.includes('name'));
+    const expIdx     = headers.findIndex(h => h.includes('expense') || h.includes('head'));
+    const subjectIdx = headers.findIndex(h => h.includes('subject') || h.includes('email'));
+
+    if (nameIdx === -1) { toast('Could not find vendor name column', 'error'); return; }
+
+    const vendors = lines.slice(1).map(line => {
+      const cols = line.split(sep).map(c => c.replace(/"/g,'').trim());
+      return {
+        name: cols[nameIdx] || '',
+        default_expense_head: expIdx > -1 ? cols[expIdx] || '' : '',
+        email_subject: subjectIdx > -1 ? cols[subjectIdx] || '' : '',
+      };
+    }).filter(v => v.name);
+
+    document.getElementById('bulk-preview').innerHTML = `
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">${vendors.length} vendors found — preview:</div>
+      <div style="max-height:200px;overflow-y:auto;font-size:11px">
+        ${vendors.slice(0,10).map(v => `<div style="padding:3px 0;border-bottom:1px solid var(--border-light)">${esc(v.name)} → ${esc(v.default_expense_head||'—')}</div>`).join('')}
+        ${vendors.length > 10 ? `<div style="padding:3px 0;color:var(--text-tertiary)">…and ${vendors.length-10} more</div>` : ''}
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="confirmBulkUpload(${JSON.stringify(vendors).replace(/"/g,'&quot;')})">Import ${vendors.length} Vendors</button>
+    `;
+  };
+  reader.readAsText(file);
+}
+
+async function confirmBulkUpload(vendors) {
+  showLoading('Importing vendors…');
+  const data = await post({ action: 'bulkSaveVendors', vendors });
+  hideLoading();
+  toast(data?.success ? data.message : data?.message || 'Failed', data?.success ? 'success' : 'error');
+  if (data?.success) { document.getElementById('bulk-preview').innerHTML = ''; loadSettings(); }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function openModal(title, body, footer = '') {
   document.getElementById('modal-title').textContent = title;
@@ -652,11 +733,14 @@ function toast(msg, type = '') {
   el.textContent = msg || '';
   el.className = 'toast show' + (type ? ' ' + type : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
 }
 
-function showLoading(msg = 'Processing…') { const el = document.getElementById('upload-loading'); el.querySelector('p').textContent = msg; el.style.display = 'flex'; }
-function hideLoading() { document.getElementById('upload-loading').style.display = 'none'; }
+function showLoading(msg = 'Processing…') {
+  const el = document.getElementById('upload-loading');
+  if (el) { el.querySelector('p').textContent = msg; el.style.display = 'flex'; }
+}
+function hideLoading() { const el = document.getElementById('upload-loading'); if (el) el.style.display = 'none'; }
 
 function setVal(id, val) { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; }
 function getVal(id) { return document.getElementById(id)?.value || ''; }
